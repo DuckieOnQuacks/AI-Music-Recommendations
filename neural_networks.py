@@ -7,6 +7,23 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 
+
+'''
+What the Model Learns:
+During training, the model learns to map input features to the target output (success, a binary variable). 
+
+Specifically, it learns:
+
+Genre Impact:
+The model identifies which genres are more strongly associated with success.
+For example, genres like "pop" might have higher weights because they correlate with larger audiences globally.
+
+Country Trends:
+Certain countries might have higher success rates due to cultural preferences or larger music markets.
+For example, artists from countries with established music industries (like the United States) might have a higher baseline probability of success.
+
+'''
+
 # Load and preprocess data
 def load_data(file_path, success_threshold=10_000):
     data = pd.read_csv(file_path)
@@ -14,7 +31,10 @@ def load_data(file_path, success_threshold=10_000):
     # Define success as a binary classification
     data['success'] = (data['listeners_lastfm'] > success_threshold).astype(int)
 
-    # Process genres
+    #Binarized pattern for tags (1 if associated with genre, 0 if not)
+    '''rock    pop    jazz    afrobeat    electronic    highlife    folk
+        1       1      0       0           0             0           0'''
+    
     data['filtered_tags'] = data['filtered_tags'].apply(eval)
     mlb = MultiLabelBinarizer()
     genres_encoded = mlb.fit_transform(data['filtered_tags'])
@@ -205,9 +225,13 @@ if __name__ == "__main__":
     print("Test Evaluation:")
     evaluate_model(model, X_test, y_test)
 
-    # Get user input for prediction
-    country = input("Enter the country: ").strip()
-    genres = input("Enter genres (comma-separated): ").strip().split(',')
+    while True:
+        country = input("\nEnter the country (or type 'exit' to quit): ").strip()
+        if country.lower() == 'exit':
+            print("Exiting the program. Goodbye!")
+            break
 
-    # Predict success rate
-    predict_success(model, X_train, le, mlb, data, country, genres)
+        genres = input("Enter genres (comma-separated): ").strip().split(',')
+
+        # Predict success rate
+        predict_success(model, X_train, le, mlb, data, country, genres)
