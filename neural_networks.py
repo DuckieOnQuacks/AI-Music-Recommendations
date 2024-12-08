@@ -69,7 +69,9 @@ def split_data(X, y, test_size=0.3, val_size=0.5, random_state=42):
     torch.cuda.manual_seed_all(random_state) # Using this for reproducibility
     X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=test_size, random_state=random_state)
     X_test, X_val, y_test, y_val = train_test_split(X_temp, y_temp, test_size=val_size, random_state=random_state)
-    return X_train, X_test, X_val, y_train, y_test, y_val
+    
+
+    return X_train, X_val, y_train, y_val
 
 # Define the neural network
 class MultiLayerNet(nn.Module):
@@ -91,10 +93,25 @@ class MultiLayerNet(nn.Module):
         x = self.sigmoid(x)
         return x
 
+def calculate_accuracy(model, X, y):
+    with torch.no_grad():
+        predictions = model(X).squeeze()
+        predicted_labels = (predictions > 0.5).float()
+        accuracy = (predicted_labels == y).float().mean().item()
+    return accuracy
+
+def calculate_loss(model, criterion, X, y):
+    with torch.no_grad():
+        outputs = model(X).squeeze()
+        loss = criterion(outputs, y)
+    return loss.item()
+
 # Train the model
 def train_model(model, optimizer, criterion, X_train, y_train, X_val, y_val, num_epochs):
     train_losses = []
-    val_losses = []
+    test_losses = []
+    train_accuracies = []
+    test_accuracies = []
 
     for epoch in range(num_epochs):
         model.train()
@@ -104,17 +121,23 @@ def train_model(model, optimizer, criterion, X_train, y_train, X_val, y_val, num
         loss.backward()
         optimizer.step()
 
+        # Calculate training metrics
         train_losses.append(loss.item())
+        train_accuracy = calculate_accuracy(model, X_train, y_train)
+        train_accuracies.append(train_accuracy)
 
+        # Calculate test metrics
         model.eval()
-        with torch.no_grad():
-            val_outputs = model(X_val).squeeze()
-            val_loss = criterion(val_outputs, y_val)
-            val_losses.append(val_loss.item())
+        test_loss = calculate_loss(model, criterion, X_test, y_test)
+        test_accuracy = calculate_accuracy(model, X_test, y_test)
+        test_losses.append(test_loss)
+        test_accuracies.append(test_accuracy)
 
-        print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {loss.item():.4f}, Validation Loss: {val_loss.item():.4f}")
+        print(f"Epoch [{epoch + 1}/{num_epochs}], "
+              f"Train Loss: {loss.item():.4f}, Train Acc: {train_accuracy:.4f}, "
+              f"Test Loss: {test_loss:.4f}, Test Acc: {test_accuracy:.4f}")
 
-    return train_losses, val_losses
+    return train_losses, test_losses, train_accuracies, test_accuracies
 
 '''def print_top_genres_in_country(data, country, top_n=10):
     # Filter data for the specific country
@@ -189,11 +212,9 @@ if __name__ == "__main__":
     # Load and preprocess data
     file_path = "filtered_data.csv"
     X, y, mlb, le, scaler, data = load_data(file_path)
-        
-    #print_top_genres_in_country(data, 'Germany')
 
-    # Split data
-    X_train, X_test, X_val, y_train, y_test, y_val = split_data(X, y)
+    # Split data (we only use train and test here for plotting)
+    X_train, X_test, y_train, y_test = split_data(X, y)
 
     # Initialize the model
     input_dim = X_train.shape[1]
@@ -203,20 +224,31 @@ if __name__ == "__main__":
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-    # Train the model
+    # Train the model and track metrics
     num_epochs = 40
-    train_losses, val_losses = train_model(model, optimizer, criterion, X_train, y_train, X_val, y_val, num_epochs)
+    train_losses, test_losses, train_accuracies, test_accuracies = train_model(
+        model, optimizer, criterion, X_train, y_train, X_test, y_test, num_epochs
+    )
 
-    # Plot training and validation losses
+    # Plot training and test losses
     plt.figure(figsize=(10, 5))
     plt.plot(train_losses, label='Training Loss')
-    plt.plot(val_losses, label='Validation Loss')
+    plt.plot(test_losses, label='Test Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.title('Training and Validation Loss')
+    plt.title('Training and Test Loss')
     plt.legend()
     plt.show()
 
+    # Plot training and test accuracies
+    plt.figure(figsize=(10, 5))
+    plt.plot(train_accuracies, label='Training Accuracy')
+    plt.plot(test_accuracies, label='Test Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.title('Training and Test Accuracy')
+    plt.legend()
+    plt.show()
 
     # Evaluate the model
     print("Train Evaluation:")
