@@ -6,6 +6,7 @@ from sklearn.metrics import classification_report
 from sklearn.model_selection import cross_val_score
 import matplotlib.pyplot as plt
 import xgboost as xgb
+from sklearn.metrics import roc_curve, auc
 import warnings
 warnings.filterwarnings('ignore', category=UserWarning, message=".*Falling back to prediction using DMatrix.*")
  
@@ -30,13 +31,15 @@ def load_data(file_path, success_threshold=10_000):
         pd.DataFrame(countries_encoded, columns=['country'])
     ], axis=1)
 
+    feature_names = X.columns.tolist()
+
     # Normalize features
     scaler = MinMaxScaler()
     X = scaler.fit_transform(X)
 
     y = data['success'].values
 
-    return X, y, mlb, le, scaler, data
+    return X, y, mlb, le, scaler, feature_names, data
 
 def predict_success(model, X_train, le, mlb, scaler, data, country, genres):
     # Encode country
@@ -76,20 +79,18 @@ def predict_success(model, X_train, le, mlb, scaler, data, country, genres):
 if __name__ == "__main__":
 
     file_path = "filtered_data.csv"
-    X, y, mlb, le, scaler, data = load_data(file_path)
+    X, y, mlb, le, scaler, feature_names, data = load_data(file_path)
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.3, random_state=42)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2)
-
-
-    bst = xgb.XGBClassifier(n_estimators=800, max_depth=12, learning_rate=0.02, gamma=.2, subsample=0.9, objective='binary:logistic', tree_method='hist', device='cuda')
- 
+    bst = xgb.XGBClassifier(n_estimators=501, max_depth=8, learning_rate=0.04, gamma=1, subsample=0.6, objective='binary:logistic', tree_method='hist', device='cuda')
 
     scores = cross_val_score(bst, X, y, cv=5, scoring='accuracy')
     print(f"Cross-validation accuracy scores: {scores}")
     print(f"Mean cross-validation accuracy: {scores.mean()}")
-
+    
     bst.fit(X_train, y_train)
-
+    
     print("Train Evaluation:")
     y_train_pred = bst.predict(X_train)
     print(classification_report(y_train, y_train_pred, target_names=['Not Successful', 'Successful']))
@@ -97,6 +98,36 @@ if __name__ == "__main__":
     print("Test Evaluation:")
     y_test_pred = bst.predict(X_test)
     print(classification_report(y_test, y_test_pred, target_names=['Not Successful', 'Successful']))
+    
+    importance = bst.feature_importances_
+    feature_importance_df = pd.DataFrame({
+        'Feature': feature_names,
+        'Importance': importance
+    })
+    feature_importance_df = feature_importance_df.sort_values(by='Importance', ascending=False)
+    top_n = 20
+    
+    plt.figure(figsize=(10, 6))
+    plt.barh(feature_importance_df['Feature'][:top_n], feature_importance_df['Importance'][:top_n])
+    plt.gca().invert_yaxis()
+    plt.xlabel('Importance')
+    plt.title('Top 20 Features by Importance')
+    plt.show()
+    
+    y_prob = bst.predict_proba(X_test)[:, 1]
+    fpr, tpr, thresholds = roc_curve(y_test, y_prob)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure(figsize=(6, 6))
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic (ROC) Curve')
+    plt.legend(loc="lower right")
+    plt.show()
 
     while True:
         country = input("\nEnter the country (or type 'exit' to quit): ").strip()
