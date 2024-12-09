@@ -6,6 +6,9 @@ from sklearn.metrics import classification_report
 from sklearn.model_selection import cross_val_score
 import matplotlib.pyplot as plt
 import xgboost as xgb
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, message=".*Falling back to prediction using DMatrix.*")
+ 
 
 # Load and preprocess data
 def load_data(file_path, success_threshold=10_000):
@@ -35,8 +38,6 @@ def load_data(file_path, success_threshold=10_000):
 
     return X, y, mlb, le, scaler, data
 
-
-
 def predict_success(model, X_train, le, mlb, scaler, data, country, genres):
     # Encode country
     try:
@@ -64,9 +65,12 @@ def predict_success(model, X_train, le, mlb, scaler, data, country, genres):
     # Normalize the input using the same scaler
     user_input_scaled = scaler.transform([user_input])
 
-    success_prob = model.predict_proba(user_input_scaled)[0][1]
+    duser_input = xgb.DMatrix(user_input_scaled, device='cuda')
+
+    success_prob = model.predict_proba(duser_input)[0][1]
     success_rate = success_prob * 100
     print(f"Predicted Success Rate: {success_rate:.2f}%")
+
 
 
 if __name__ == "__main__":
@@ -77,8 +81,8 @@ if __name__ == "__main__":
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2)
 
 
-    bst = xgb.XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.1, objective='binary:logistic')
-    
+    bst = xgb.XGBClassifier(n_estimators=800, max_depth=12, learning_rate=0.02, gamma=.2, subsample=0.9, objective='binary:logistic', tree_method='hist', device='cuda')
+ 
 
     scores = cross_val_score(bst, X, y, cv=5, scoring='accuracy')
     print(f"Cross-validation accuracy scores: {scores}")
