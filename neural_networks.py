@@ -107,7 +107,7 @@ def calculate_loss(model, criterion, X, y):
     return loss.item()
 
 # Train the model
-def train_model(model, optimizer, criterion, X_train, y_train, X_val, y_val, num_epochs):
+def train_model(model, optimizer, criterion, X_train, y_train, X_test, y_test, num_epochs):
     train_losses = []
     test_losses = []
     train_accuracies = []
@@ -153,7 +153,7 @@ def train_model(model, optimizer, criterion, X_train, y_train, X_val, y_val, num
     for genre, count in top_genres.items():
         print(f"{genre}: {count} occurrences")'''
 
-def predict_success(model, X_train, le, mlb, data, country, genres):
+def predict_success(model, X_train, le, mlb, data, scaler, country, genres):
     # Encode country
     try:
         country_encoded = le.transform([country])[0]
@@ -187,7 +187,7 @@ def predict_success(model, X_train, le, mlb, data, country, genres):
     with torch.no_grad():
         output = model(user_tensor).item()
         success_rate = output * 100  # Convert to percentage
-        print(f"Predicted Success Rate: {success_rate:.2f}%")
+    return f"{success_rate:.2f}%"
 
 def evaluate_model(model, X, y):
     with torch.no_grad():
@@ -208,7 +208,7 @@ def calculate_accuracy(model, X, y):
     return accuracy
 
 # Main script
-if __name__ == "__main__":
+def run_neural_network(genres, country):
     # Load and preprocess data
     file_path = "filtered_data.csv"
     X, y, mlb, le, scaler, data = load_data(file_path)
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     )
 
     # Plot training and test losses
-    plt.figure(figsize=(10, 5))
+    '''plt.figure(figsize=(10, 5))
     plt.plot(train_losses, label='Training Loss')
     plt.plot(test_losses, label='Test Loss')
     plt.xlabel('Epoch')
@@ -255,15 +255,7 @@ if __name__ == "__main__":
     evaluate_model(model, X_train, y_train)
 
     print("Test Evaluation:")
-    evaluate_model(model, X_test, y_test)
+    evaluate_model(model, X_test, y_test)'''
 
-    while True:
-        country = input("\nEnter the country (or type 'exit' to quit): ").strip()
-        if country.lower() == 'exit':
-            print("Exiting the program. Goodbye!")
-            break
-
-        genres = input("Enter genres (comma-separated): ").strip().split(',')
-
-        # Predict success rate
-        predict_success(model, X_train, le, mlb, data, country, genres)
+    # Predict success rate
+    return predict_success(model, X_train, le, mlb, data, scaler, country, genres)

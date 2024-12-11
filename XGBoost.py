@@ -5,11 +5,9 @@ from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder, MinMaxScale
 from sklearn.metrics import classification_report
 from sklearn.model_selection import cross_val_score
 import matplotlib.pyplot as plt
-import xgboost as xgb
+from xgboost import XGBClassifier
 from sklearn.metrics import roc_curve, auc
-import warnings
-warnings.filterwarnings('ignore', category=UserWarning, message=".*Falling back to prediction using DMatrix.*")
- 
+
 
 # Load and preprocess data
 def load_data(file_path, success_threshold=10_000):
@@ -41,80 +39,84 @@ def load_data(file_path, success_threshold=10_000):
 
     return X, y, mlb, le, scaler, feature_names, data
 
-def predict_success(model, X_train, le, mlb, scaler, data, country, genres):
+def predict_success(model, mlb, le, scaler, country, genres):
     # Encode country
     try:
         country_encoded = le.transform([country])[0]
     except ValueError:
-        print("Invalid country. Please try again.")
-        return
+        return "Invalid country. Please try again."
 
     # Encode genres
     genres_set = set(genres)
     valid_genres = set(mlb.classes_)
     if not genres_set.issubset(valid_genres):
-        print(f"Invalid genres. Valid genres are: {', '.join(valid_genres)}")
-        return
+        return f"Invalid genres. Valid genres are: {', '.join(valid_genres)}"
 
     genres_encoded = mlb.transform([genres])[0]
 
     # Combine inputs
-    user_input = np.zeros(X_train.shape[1])
+    user_input = np.zeros(len(mlb.classes_) + 1)  # +1 for the country feature
     user_input[:len(genres_encoded)] = genres_encoded  # Set genre encoding
-    user_input[len(genres_encoded)] = country_encoded  # Set country encoding
-
-    user_input[-1] = data['listeners_lastfm'].mean()
+    user_input[-1] = country_encoded  # Set country encoding
 
     # Normalize the input using the same scaler
     user_input_scaled = scaler.transform([user_input])
 
-    duser_input = xgb.DMatrix(user_input_scaled, device='cuda')
-
-    success_prob = model.predict_proba(duser_input)[0][1]
+    # Use model to predict probabilities directly
+    success_prob = model.predict_proba(user_input_scaled)[0][1]
     success_rate = success_prob * 100
-    print(f"Predicted Success Rate: {success_rate:.2f}%")
+    return f"{success_rate:.2f}%"
 
-
-
-if __name__ == "__main__":
-
+def run_xgboost(genres, country):
     file_path = "filtered_data.csv"
     X, y, mlb, le, scaler, feature_names, data = load_data(file_path)
-    
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.3, random_state=42)
 
-    bst = xgb.XGBClassifier(n_estimators=501, max_depth=8, learning_rate=0.04, gamma=1, subsample=0.6, objective='binary:logistic', tree_method='hist', device='cuda')
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
-    scores = cross_val_score(bst, X, y, cv=5, scoring='accuracy')
+    # Initialize XGBoost Classifier
+    model = XGBClassifier(
+        n_estimators=100,
+        max_depth=6,
+        learning_rate=0.1,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42
+    )
+
+    # Train model
+    model.fit(X_train, y_train)
+
+    ''' # Cross-validation
+    scores = cross_val_score(model, X, y, cv=5, scoring='accuracy')
     print(f"Cross-validation accuracy scores: {scores}")
-    print(f"Mean cross-validation accuracy: {scores.mean()}")
-    
-    bst.fit(X_train, y_train)
-    
+    print(f"Mean cross-validation accuracy: {scores.mean():.2f}")
+
+    # Evaluate on training and test data
     print("Train Evaluation:")
-    y_train_pred = bst.predict(X_train)
+    y_train_pred = model.predict(X_train)
     print(classification_report(y_train, y_train_pred, target_names=['Not Successful', 'Successful']))
 
     print("Test Evaluation:")
-    y_test_pred = bst.predict(X_test)
+    y_test_pred = model.predict(X_test)
     print(classification_report(y_test, y_test_pred, target_names=['Not Successful', 'Successful']))
-    
-    importance = bst.feature_importances_
+
+    # Feature importance plot
+    importance = model.feature_importances_
     feature_importance_df = pd.DataFrame({
         'Feature': feature_names,
         'Importance': importance
-    })
-    feature_importance_df = feature_importance_df.sort_values(by='Importance', ascending=False)
-    top_n = 20
-    
+    }).sort_values(by='Importance', ascending=False)
+
     plt.figure(figsize=(10, 6))
-    plt.barh(feature_importance_df['Feature'][:top_n], feature_importance_df['Importance'][:top_n])
+    plt.barh(feature_importance_df['Feature'][:20], feature_importance_df['Importance'][:20])
     plt.gca().invert_yaxis()
     plt.xlabel('Importance')
     plt.title('Top 20 Features by Importance')
     plt.show()
-    
-    y_prob = bst.predict_proba(X_test)[:, 1]
+
+    # ROC Curve
+    y_prob = model.predict_proba(X_test)[:, 1]
     fpr, tpr, thresholds = roc_curve(y_test, y_prob)
     roc_auc = auc(fpr, tpr)
 
@@ -127,15 +129,8 @@ if __name__ == "__main__":
     plt.ylabel('True Positive Rate')
     plt.title('Receiver Operating Characteristic (ROC) Curve')
     plt.legend(loc="lower right")
-    plt.show()
+    plt.show()'''
 
-    while True:
-        country = input("\nEnter the country (or type 'exit' to quit): ").strip()
-        if country.lower() == 'exit':
-            print("Exiting the program. Goodbye!")
-            break
+    # Predict success rate
+    return predict_success(model, mlb, le, scaler, country, genres)
 
-        genres = input("Enter genres (comma-separated): ").strip().split(',')
-
-        # Predict success rate
-        predict_success(bst, X_train, le, mlb, scaler, data, country, genres)

@@ -64,7 +64,7 @@ if __name__ == "__main__":
     test_pred_class = (test_pred_listeners > success_threshold).astype(int)
     y_test_class = (y_test_listeners > success_threshold).astype(int)
 
-    # Print classification metrics
+    ''' # Print classification metrics
     print("\nClassification Report:")
     report = classification_report(y_test_class, test_pred_class, target_names=["Not Successful", "Successful"])
     print(report)
@@ -78,4 +78,4 @@ if __name__ == "__main__":
     plt.ylabel('Predicted Log Listeners')
     plt.title('Linear Regression Predictions vs Actual')
     plt.plot([min(y_test), max(y_test)], [min(y_test), max(y_test)], 'r--')
-    plt.show()
+    plt.show()'''
